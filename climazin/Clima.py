@@ -19,13 +19,28 @@ app_ui = ui.page_sidebar(
         ui.input_select("modo", "Modo de visualização:", choices=["Gráfico", "Mapa"], selected="Gráfico"),
         ui.input_select('cidade', 'Escolha a cidade:', choices=cidades),
         ui.input_slider('ano', 'Escolha o ano:', min=min(anos), max=max(anos), value=min(anos), step=1),
+        style='background-color: white; height: 100vh;'
     ),
     ui.column(
         12,
         ui.h2('Visualizador Climático'),
-        ui.panel_conditional("input.modo == 'Gráfico'", ui.output_plot('graficoTemp')),
-        ui.panel_conditional("input.modo == 'Mapa'", ui.output_plot('mapaTop', width='900px', height='900px')),
-    )
+        ui.div(
+            ui.panel_conditional("input.modo == 'Gráfico'", ui.output_plot('graficoTemp')),
+            ui.panel_conditional("input.modo == 'Mapa'", ui.output_plot('mapaTop', width='900px', height='900px')),
+            style='background: linear-gradient(to bottom, #87cefa, white); padding: 20px; border-radius: 10px; width: 100%; box-shadow: 0 4px 20px rgba(0, 0, 0 , 0.3);'           
+        ),    
+        ui.tags.style("""
+            body {
+            background: linear-gradient(to bottom, #a6a6a6, white);
+            min-height: 100vh;
+            margin: 0;
+        }
+     """),
+        
+        
+    ),
+
+
 )
 
 def server(input, output, session):
