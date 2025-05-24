@@ -1,0 +1,9 @@
+myenv/
+__pycache__/
+*.py[cod]
+*.log
+.vscode/
+.idea/
+*.tar.gz
+*.tmp
+*.swp
