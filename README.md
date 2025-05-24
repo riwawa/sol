@@ -59,6 +59,6 @@ python Clima.py
 ## Equipe
 
 - [Beatriz Lucena](https://www.github.com/riwawa)
-- [Filipe](https://github.com/lipeollv)
+- [Filipe Cavalcanti](https://github.com/lipeollv)
 - [Ian Hoda](https://github.com/Jank52)
 
