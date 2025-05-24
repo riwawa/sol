@@ -35,7 +35,7 @@ Etapas para instalar Sol
 
 1. Clone esse repositório
 ```bash
-  git clone [link]
+  git clone "https://github.com/riwawa/sol.git"
   cd climazin
 ```
 2. Para instalar todas as dependências e bibliotecas necessários para o programa funcionar, no terminal, rode:
