@@ -181,7 +181,9 @@ def gerar_mapa_temperatura(cidade, ano):
     plt.colorbar(cont, ax=ax, label='Temperatura Média Anual (°C)')
     ax.set_title(f"Mapa de Temperatura em {cidade} ({ano})")
 
-    fig.savefig(nome_arquivo)
+    fig.savefig(nome_arquivo,)
+
+    plt.tight_layout(pad=0)
     return fig
 
 def grafico_chuva(df, cidade, ano):

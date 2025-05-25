@@ -28,12 +28,6 @@ app_ui = ui.page_sidebar(
         12,
         ui.h2('Visualizador Climático'),
         ui.div(
-            ui.panel_conditional("input.tipo_dado == 'Temperatura' && input.tipo_vis == 'Gráfico'", ui.output_plot('graficoTemp')),
-            ui.panel_conditional("input.tipo_dado == 'Temperatura' && input.tipo_vis == 'Mapa'", ui.output_plot('mapaTemp')),
-            ui.panel_conditional("input.tipo_dado == 'Precipitação' && input.tipo_vis == 'Gráfico'", ui.output_plot('graficoChuva')),
-            ui.panel_conditional("input.tipo_dado == 'Precipitação' && input.tipo_vis == 'Mapa'", ui.output_ui("avisoMapa")),
-            ui.panel_conditional("input.tipo_dado == 'Vento' && input.tipo_vis == 'Mapa'", ui.output_plot('ventoMapa')),
-            ui.panel_conditional("input.tipo_dado == 'Vento' && input.tipo_vis == 'Gráfico'", ui.output_ui("avisoGrafico")),
 
             style='background: linear-gradient(to bottom, #87cefa, white); padding: 20px; border-radius: 10px; width: 100%; box-shadow: 0 4px 20px rgba(0, 0, 0 , 0.3);'           
         ),    
@@ -91,8 +85,8 @@ def server(input, output, session):
 
     @output
     @render.plot
-    def ventoMapa():
-        
+    def mapaVento():
+
 app = App(app_ui, server)
 
 if __name__ == "__main__":
