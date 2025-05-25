@@ -215,46 +215,6 @@ def grafico_chuva(df, cidade, ano):
 
     return fig
 
-def buscar_dados_vento(cidade, ano):
-    """busca e armazena em cache os dados de vento da cidade para o ano."""
-    pasta = os.path.join("dados", cidade.replace(" ", "_"), str(ano))
-    os.makedirs(pasta, exist_ok=True)
-    arquivo = os.path.join(pasta, f"vento_{cidade.replace(' ', '_')}_{ano}.csv")
-
-    # se o cache existe retorna o df
-    if os.path.exists(arquivo):
-        df_vento = pd.read_csv(arquivo, parse_dates=['hora'])
-        if 'velocidade' in df.columns and 'direcao' in df_vento.columns:
-            return df_vento
-        else:
-            print("Cache antigo sem colunas de vento. Atualizando cache...")
-
-    lat, lon = obter_coordenadas(cidade)
-    url = (
-        f"https://api.open-meteo.com/v1/forecast?"
-        f"latitude={lat}&longitude={lon}&start_date={ano}-01-01&end_date={ano}-12-31"
-        "&hourly=wind_speed_10m,wind_direction_10m"
-        "&timezone=America%2FSao_Paulo"
-    )
-
-    res = requests.get(url)
-    res.raise_for_status()
-    dados = res.json()
-
-    if not dados.get('hourly'):
-        raise ValueError("Dados de vento não encontrados para o ano.")
-
-    df_vento = pd.DataFrame({
-        "hora": pd.to_datetime(dados['hourly'].get('time', [])),
-        "velocidade": dados['hourly'].get('wind_speed_10m', [None] * len(dados['hourly'].get('time', []))),
-        "direcao": dados['hourly'].get('wind_direction_10m', [None] * len(dados['hourly'].get('time', []))),
-        "lon": lon,
-        "lat": lat,
-    })
-
-    df_vento.to_csv(arquivo, index=False)
-    return df
-
 """
 converter velocidade + direção em componentes vetoriais:
 u = componente do vento na direção leste-oeste (x)
@@ -267,16 +227,108 @@ def calcular_vetor(df_vento):
     ang_rad = np.deg2rad(df_vento['direcao'])
     df_vento['u'] = -df_vento['velocidade'] * np.sin(ang_rad)
     df_vento['v'] = -df_vento['velocidade'] * np.cos(ang_rad)
+    print(df_vento[['velocidade', 'direcao']].head())
+    print(df_vento[['u', 'v']].head())
     return df_vento
 
-def mapa_vento(cidade, ano):
-    lat = df_vento['lat'].iloc[0]
-    lon = df_vento['lon'].iloc[0]
+def gerar_grade(lat_centro, lon_centro, delta=0.2, n=5):
+    """ 
+    gera uma grade de nxn pontos 
+    """
+    lats = np.linspace(lat_centro - delta, lat_centro + delta, n)
+    lons = np.linspace(lon_centro - delta, lon_centro + delta, n)
+    grade = [(lat, lon) for lat in lats for lon in lons]
+    return grade
 
-    # Projecao
+def agrupar_por_direcao(df):
+    df['setor'] = (df['direcao'] // 30 * 30).astype(int)
+
+    df_media_setor = df.groupby('setor').agg({
+        'u': 'mean',
+        'v': 'mean',
+        'lat': 'first',
+        'lon': 'first',
+        'velocidade': 'count'
+    }).reset_index()
+
+    # Filtra setores com dados suficientes (ajuste o limiar)
+    df_media_setor = df_media_setor[df_media_setor['velocidade'] > 100]
+
+    if df_media_setor.empty:
+        return pd.DataFrame(columns=['u', 'v', 'lat', 'lon'])
+
+    return df_media_setor[['u', 'v', 'lat', 'lon']]
+
+def buscar_dados_vento_ponto(lat, lon, ano, cidade):
+    pasta = os.path.join("dados", cidade.replace(" ", "_"), str(ano))
+    os.makedirs(pasta, exist_ok=True)
+    arquivo = os.path.join(pasta, f"vento_{lat:.2f}_{lon:.2f}.csv")
+
+    if os.path.exists(arquivo):
+        df_vento = pd.read_csv(arquivo, parse_dates=['hora'])
+        if all(col in df_vento.columns for col in ['velocidade', 'direcao', 'u', 'v']):
+            return agrupar_por_direcao(df_vento)
+        else:
+            print("Cache antigo incompleto. Atualizando cache...")
+
+    url = (
+        f"https://archive-api.open-meteo.com/v1/archive?"
+        f"latitude={lat}&longitude={lon}&start_date={ano}-01-01&end_date={ano}-12-31"
+        "&hourly=wind_speed_10m,wind_direction_10m"
+        "&timezone=America%2FSao_Paulo"
+    )
+
+    res = requests.get(url)
+    res.raise_for_status()
+    dados = res.json()
+    if not dados.get('hourly'):
+        return None
+    
+    df_vento = pd.DataFrame({
+        "hora": pd.to_datetime(dados['hourly'].get('time', [])),
+        "velocidade": dados['hourly'].get('wind_speed_10m', [None] * len(dados['hourly'].get('time', []))),
+        "direcao": dados['hourly'].get('wind_direction_10m', [None] * len(dados['hourly'].get('time', []))),
+        "lat": lat,
+        "lon": lon
+    })
+
+    df_vento = calcular_vetor(df_vento)
+    df_vento.to_csv(arquivo, index=False)
+
+    if not dados.get('hourly') or not dados['hourly'].get('time'):
+        return None
+    return agrupar_por_direcao(df_vento)
+
+def coletar_grade_vento(cidade, ano):
+    lat_centro, lon_centro = obter_coordenadas(cidade)
+    pontos = gerar_grade(lat_centro, lon_centro, delta=1, n=5)
+
+    df_lista = []
+    for lat, lon in pontos:
+        try:
+            df_ponto = buscar_dados_vento_ponto(lat, lon, ano, cidade) 
+            if df_ponto is not None:
+                df_lista.append(df_ponto)  # df_ponto já está agrupado por setor
+        except Exception as e:
+            print(f"Erro no ponto {lat},{lon}: {e}")
+    if df_lista:
+        df_grade = pd.concat(df_lista, ignore_index=True)
+        return df_grade
+    return pd.DataFrame(columns=['u', 'v', 'lat', 'lon']) 
+    
+def mapa_vento(cidade, ano):
+    df_grade = coletar_grade_vento(cidade, ano)
+    lat_centro, lon_centro = obter_coordenadas(cidade)
+
+    # Converter u e v para numérico e remover dados inválidos
+    df_grade['u'] = pd.to_numeric(df_grade['u'], errors='coerce')
+    df_grade['v'] = pd.to_numeric(df_grade['v'], errors='coerce')
+    df_grade = df_grade.dropna(subset=['u', 'v'])
+
+    # Projeção
     proj = ccrs.Mercator()
-    fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': proj})
-    ax.set_extent([lon - 2, lon + 2, lat - 2, lat + 2], crs=ccrs.PlateCarree())
+    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': proj})
+    ax.set_extent([lon_centro - 2, lon_centro + 2, lat_centro - 2, lat_centro + 2], crs=ccrs.PlateCarree())
 
     ax.add_feature(cfeature.LAND.with_scale('50m'), facecolor='lightgray')
     ax.add_feature(cfeature.OCEAN.with_scale('50m'))
@@ -285,27 +337,21 @@ def mapa_vento(cidade, ano):
     ax.add_feature(cfeature.LAKES.with_scale('50m'), alpha=0.5)
     ax.add_feature(cfeature.RIVERS.with_scale('50m'))
 
-    # PLOTAGEM
-    ax.plot(lon, lat, 'ro', markersize=8, transform=ccrs.PlateCarree())
-    ax.text(lon + 0.1, lat + 0.1, transform=ccrs.PlateCarree())
+    # Pontos centrais
+    ax.plot(lon_centro, lat_centro, 'ro', markersize=8, transform=ccrs.PlateCarree())
+    ax.text(lon_centro + 0.1, lat_centro + 0.1, cidade, transform=ccrs.PlateCarree())
 
-    # CALCULA OS VETORES
-    df_vento = calcular_vetor(df_vento)
-    df_amostra = df_vento.iloc[::6]
-
-    # DESENHA OS VETORES
+    # VETORES DE VENTO
     ax.quiver(
-        df_amostra['lon'], df_amostra['lat'],
-        df_amostra['u'], df_amostra['v'],
+        df_grade['lon'], df_grade['lat'],
+        df_grade['u'], df_grade['v'],
         transform=ccrs.PlateCarree(),
-        angles='xy', scale_units='xy', scale=1, color='blue',
+        angles='xy',
+        scale_units='xy',
+        scale=1.5,
+        color='blue',
         width=0.003
     )
 
-    ax.set_title('Mapa de vento - Velocidade e direção')
+    ax.set_title(f'Mapa de vento médio anual em {cidade} em {ano}')
     return fig
-
-
-
-
-

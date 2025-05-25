@@ -30,8 +30,10 @@ app_ui = ui.page_sidebar(
         ui.div( # Gráfico
             ui.panel_conditional("input.tipo_dado == 'Temperatura' && input.tipo_vis == 'Gráfico'", ui.output_plot('graficoTemp')),
             ui.panel_conditional("input.tipo_dado == 'Temperatura' && input.tipo_vis == 'Mapa'", ui.output_plot('mapaTemp')),
+
             ui.panel_conditional("input.tipo_dado == 'Precipitação' && input.tipo_vis == 'Gráfico'", ui.output_plot('graficoChuva')),
             ui.panel_conditional("input.tipo_dado == 'Precipitação' && input.tipo_vis == 'Mapa'", ui.output_ui("avisoMapa")),
+
             ui.panel_conditional("input.tipo_dado == 'Vento' && input.tipo_vis == 'Mapa'", ui.output_plot('ventoMapa')),
             ui.panel_conditional("input.tipo_dado == 'Vento' && input.tipo_vis == 'Gráfico'", ui.output_ui("avisoGrafico")),
 
@@ -55,6 +57,8 @@ def server(input, output, session):
             "style": "padding: 20px; background-color: #ffdddd; color: #a33; border-radius: 10px; border: 1px solid #a33;"
         }, "Mapa desse modo não está disponível.")
 
+    @output
+    @render.ui
     def avisoGrafico():
         return ui.div({
             "style": "padding: 20px; background-color: #ffdddd; color: #a33; border-radius: 10px; border: 1px solid #a33;"
@@ -78,7 +82,7 @@ def server(input, output, session):
 
     @output
     @render.plot
-    def graficoVento():
+    def ventoMapa():
         cidade = input.cidade()
         ano = input.ano()
         fig = mapa_vento(cidade, ano)
