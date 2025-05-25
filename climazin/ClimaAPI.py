@@ -215,10 +215,6 @@ def grafico_chuva(df, cidade, ano):
 
     return fig
 
-import os
-import requests
-import pandas as pd
-
 def buscar_dados_vento(cidade, ano):
     """busca e armazena em cache os dados de vento da cidade para o ano."""
     pasta = os.path.join("dados", cidade.replace(" ", "_"), str(ano))
