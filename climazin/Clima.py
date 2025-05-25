@@ -5,13 +5,13 @@ from ClimaAPI import (
     buscar_dados_clima,
     grafico_temperatura,
     gerar_mapa_temperatura,
-    grafico_chuva
+    grafico_chuva,
+    mapa_vento
 )
 import matplotlib.pyplot as plt
 
 anos = list(range(2000, 2025))
 
-# === UI ===
 app_ui = ui.page_sidebar(
     ui.sidebar(
         ui.input_select("tipo_dado", "Tipo de dado:", choices=["Temperatura", "Precipitação", "Vento"]),
@@ -22,7 +22,6 @@ app_ui = ui.page_sidebar(
     ),
     ui.column(
         12,
-        ui.h2('Visualizador Climático'),
         ui.div(
             ui.h2(
                 'Visualizador Climático', style='background-color: #004578; color: white; font-family: "Arial Black"; padding: 10px 20px; border-radius: 10px;'
@@ -80,7 +79,10 @@ def server(input, output, session):
     @output
     @render.plot
     def graficoVento():
- 
+        cidade = input.cidade()
+        ano = input.ano()
+        fig = mapa_vento(cidade, ano)
+        return fig
 
     @output
     @render.plot

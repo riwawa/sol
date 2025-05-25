@@ -282,4 +282,34 @@ def mapa_vento(cidade, ano):
     fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': proj})
     ax.set_extent([lon - 2, lon + 2, lat - 2, lat + 2], crs=ccrs.PlateCarree())
 
+    ax.add_feature(cfeature.LAND.with_scale('50m'), facecolor='lightgray')
+    ax.add_feature(cfeature.OCEAN.with_scale('50m'))
+    ax.add_feature(cfeature.COASTLINE.with_scale('50m'))
+    ax.add_feature(cfeature.BORDERS.with_scale('50m'), linestyle=':')
+    ax.add_feature(cfeature.LAKES.with_scale('50m'), alpha=0.5)
+    ax.add_feature(cfeature.RIVERS.with_scale('50m'))
+
+    # PLOTAGEM
+    ax.plot(lon, lat, 'ro', markersize=8, transform=ccrs.PlateCarree())
+    ax.text(lon + 0.1, lat + 0.1, transform=ccrs.PlateCarree())
+
+    # CALCULA OS VETORES
+    df_vento = calcular_vetor(df_vento)
+    df_amostra = df_vento.iloc[::6]
+
+    # DESENHA OS VETORES
+    ax.quiver(
+        df_amostra['lon'], df_amostra['lat'],
+        df_amostra['u'], df_amostra['v'],
+        transform=ccrs.PlateCarree(),
+        angles='xy', scale_units='xy', scale=1, color='blue',
+        width=0.003
+    )
+
+    ax.set_title('Mapa de vento - Velocidade e direção')
+    return fig
+
+
+
+
 
