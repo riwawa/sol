@@ -36,23 +36,19 @@ Etapas para instalar Sol
 1. Clone esse repositório
 ```bash
   git clone "https://github.com/riwawa/sol.git"
-  cd climazin
+  cd climazin_project
 ```
 2. Para instalar todas as dependências e bibliotecas necessários para o programa funcionar, no terminal, rode:
 ```bash
-./activate_and_install.sh
-```
-Se o script não estiver com permissão de execução, execute antes:
-
-```bash
-chmod +x activate_and_install.sh
-./activate_and_install.sh
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
 Após isso, o ambiente estará pronto para rodar o projeto.
 
 Para iniciar o programa, execute:
 ```bash
+cd climazin
 python Clima.py
 ```
 

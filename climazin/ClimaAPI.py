@@ -20,30 +20,34 @@ def obter_coordenadas(cidade):
     if not dados.get('results'):
         raise ValueError("Nenhuma coordenada encontrada para a cidade.")
     return dados['results'][0]['latitude'], dados['results'][0]['longitude']
-
 def buscar_dados_clima(cidade, ano):
     """busca e transforma em cache os dados da cidade"""
-    pasta = os.path.join("dados", cidade.replace(" ", "_"), str(ano)) # define a pasta para armazenar os dados, nesse caso a pasta dados
+    pasta = os.path.join("dados", cidade.replace(" ", "_"), str(ano))
     os.makedirs(pasta, exist_ok=True)
     arquivo = os.path.join(pasta, f"dados_{cidade.replace(' ', '_')}_{ano}.csv")
 
-    if os.path.exists(arquivo): # se o arquivo já existe, carrega os dados com pandas e retorna
+    if os.path.exists(arquivo): 
         df = pd.read_csv(arquivo, parse_dates=['date'])
-        return df
         
-    # se nao, chamada o obter coordenadas para pegar lat/lon da cidade
+        # Verifica se a coluna 'precipitacao' está no DataFrame
+        if 'precipitacao' not in df.columns:
+            print("Cache antigo sem coluna 'precipitacao'. Atualizando cache...")
+        else:
+            return df  # coluna existe, retorna o df normalmente
+
+    # Se não existe o arquivo ou cache antigo está incompleto, baixa da API
     lat, lon = obter_coordenadas(cidade)
     url = (
         "https://archive-api.open-meteo.com/v1/archive?"
         f"latitude={lat}&longitude={lon}&start_date={ano}-01-01&end_date={ano}-12-31"
-        "&daily=temperature_2m_max,temperature_2m_min"
+        "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
         "&timezone=America%2FSao_Paulo"
     )
 
-    res = requests.get(url) # faz requisicao
+    res = requests.get(url)
     res.raise_for_status()
-    dados = res.json() # valida a resposta
-    if not dados.get('daily'): # se nao encontrar dados, mensagem de erro
+    dados = res.json()
+    if not dados.get('daily'):
         raise ValueError("Dados climáticos não encontrados para o ano.")
 
     df = pd.DataFrame({
@@ -51,13 +55,12 @@ def buscar_dados_clima(cidade, ano):
         "date": pd.to_datetime(dados['daily'].get('time', [])),
         "temp_max": dados['daily'].get('temperature_2m_max', [None] * len(dados['daily'].get('time', []))),
         "temp_min": dados['daily'].get('temperature_2m_min', [None] * len(dados['daily'].get('time', []))),
+        "precipitacao": dados['daily'].get('precipitation_sum', [None] * len(dados['daily'].get('time', []))),
     })
 
-    lat, lon = obter_coordenadas(cidade)  # garante que tem lat/lon mesmo carregando do CSV
- 
-    df["temp"] = df[['temp_max', 'temp_min']].mean(axis=1) # cria coluna temp que é a média das temperaturas máxima e mínima
-    df.to_csv(arquivo, index=False) # salva o dataframe em CSV para cache
-    return df # retorna o dataframe
+    df["temp"] = df[['temp_max', 'temp_min']].mean(axis=1)
+    df.to_csv(arquivo, index=False)
+    return df
 
 def grafico_temperatura(df, cidade, ano):
     """Gera gráfico de temperatura média mensal usando os dados já adquiridos na função anterior"""
@@ -178,4 +181,33 @@ def gerar_mapa_temperatura(cidade, ano):
     ax.set_title(f"Mapa de Temperatura em {cidade} ({ano})")
 
     fig.savefig(nome_arquivo)
+    return fig
+
+def grafico_chuva(df, cidade, ano):
+    """gera gráfico de precipitacao media mensal"""
+    df = buscar_dados_clima(cidade, ano)  
+    
+    if 'precipitacao' not in df.columns:
+        raise ValueError("A coluna 'precipitacao' não está presente no DataFrame retornado.")
+    
+    data_set = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+    df['mes'] = df['date'].dt.month
+    soma_mensal = df.groupby('mes')['precipitacao'].sum().reindex(range(1, 13))
+
+    # criar a figura
+    fig, ax = plt.subplots(figsize=(6,6))
+    # desenhar o grafico
+    bars = ax.bar(soma_mensal.index, soma_mensal.values, color='skyblue', width = 0.5)
+
+    # eixo x
+    ax.set_xticks(soma_mensal.index)
+    ax.set_xticklabels(data_set)
+    ax.set_xlabel("Mês") #nome do eixo x
+
+    # eixo precipitacao
+    ax.grid(False)
+    ax.set_ylabel("Precipitação Total (mm)") # nome do eixo y (esquerdo)
+    ax.set_ylim(0,450)
+    ax.set_title(f"Precipitação mensal de {cidade} em {ano}")
+
     return fig
