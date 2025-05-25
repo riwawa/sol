@@ -23,19 +23,21 @@ app_ui = ui.page_sidebar(
     ),
     ui.column(
         12,
-        ui.h2('Visualizador Climático'),
-        ui.div(
+        ui.div( # Titulo
+            ui.h2('Visualizador Climático', style='background-color: #004578; color: white; font-family: "Arial Black"; padding: 10px 20px; border-radius: 10px;'),
+        ),
+        ui.div( # Gráfico
             ui.panel_conditional("input.modo == 'Gráfico'", ui.output_plot('graficoTemp')),
             ui.panel_conditional("input.modo == 'Mapa'", ui.output_plot('mapaTop', width='900px', height='900px')),
-            style='background: linear-gradient(to bottom, #87cefa, white); padding: 20px; border-radius: 10px; width: 100%; box-shadow: 0 4px 20px rgba(0, 0, 0 , 0.3);'           
+            style='background: linear-gradient(to bottom, #004578, #7ba8c9); padding: 10px; border-radius: 10px; width: 100%; box-shadow: 0 4px 20px rgba(0, 0, 0 , 0.3); margin-top: 50px;',          
         ),    
-        ui.tags.style("""
+        ui.tags.style(""" 
             body {
-            background: linear-gradient(to bottom, #a6a6a6, white);
+            background: linear-gradient(to bottom, #87cefa, white); 
             min-height: 100vh;
             margin: 0;
         }
-     """),
+     """), # Plano de fundo (cor) 
         
         
     ),
