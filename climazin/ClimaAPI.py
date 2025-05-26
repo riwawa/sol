@@ -6,9 +6,12 @@ import matplotlib.pyplot as plt # plotagem de gráfico e mapas
 import cartopy.crs as ccrs # plotagem de mapa e gráficos
 import cartopy.feature as cfeature # plotagem de mapa e gráficos
 from matplotlib import cm 
+from metpy.interpolate import interpolate_to_grid
+from metpy.units import units
 from scipy.interpolate import griddata # interpolação de dados espaciais
 import concurrent.futures # parelização de requisições - serve pra deixar mais rapido o carregamento
 import time
+
 
 
 def obter_coordenadas(cidade):
@@ -215,34 +218,19 @@ def grafico_chuva(df, cidade, ano):
 
     return fig
 
-"""
-converter velocidade + direção em componentes vetoriais:
-u = componente do vento na direção leste-oeste (x)
-v = componente do vento na direção norte-sul (y)
-
-u = -velocidade * sin(rad(direcao))
-v = -velocidade * cos(rad(direcao))
-"""
 def calcular_vetor(df_vento):
     ang_rad = np.deg2rad(df_vento['direcao'])
     df_vento['u'] = -df_vento['velocidade'] * np.sin(ang_rad)
     df_vento['v'] = -df_vento['velocidade'] * np.cos(ang_rad)
-    print(df_vento[['velocidade', 'direcao']].head())
-    print(df_vento[['u', 'v']].head())
     return df_vento
 
 def gerar_grade(lat_centro, lon_centro, delta=0.2, n=5):
-    """ 
-    gera uma grade de nxn pontos 
-    """
     lats = np.linspace(lat_centro - delta, lat_centro + delta, n)
     lons = np.linspace(lon_centro - delta, lon_centro + delta, n)
-    grade = [(lat, lon) for lat in lats for lon in lons]
-    return grade
+    return [(lat, lon) for lat in lats for lon in lons]
 
 def agrupar_por_direcao(df):
-    df['setor'] = (df['direcao'] // 30 * 30).astype(int)
-
+    df['setor'] = (df['direcao'] // 60 * 60).astype(int)
     df_media_setor = df.groupby('setor').agg({
         'u': 'mean',
         'v': 'mean',
@@ -250,14 +238,8 @@ def agrupar_por_direcao(df):
         'lon': 'first',
         'velocidade': 'count'
     }).reset_index()
-
-    # Filtra setores com dados suficientes (ajuste o limiar)
-    df_media_setor = df_media_setor[df_media_setor['velocidade'] > 100]
-
-    if df_media_setor.empty:
-        return pd.DataFrame(columns=['u', 'v', 'lat', 'lon'])
-
-    return df_media_setor[['u', 'v', 'lat', 'lon']]
+    df_media_setor = df_media_setor[df_media_setor['velocidade'] > 300]
+    return df_media_setor[['u', 'v', 'lat', 'lon']] if not df_media_setor.empty else pd.DataFrame(columns=['u', 'v', 'lat', 'lon'])
 
 def buscar_dados_vento_ponto(lat, lon, ano, cidade):
     pasta = os.path.join("dados", cidade.replace(" ", "_"), str(ano))
@@ -268,66 +250,87 @@ def buscar_dados_vento_ponto(lat, lon, ano, cidade):
         df_vento = pd.read_csv(arquivo, parse_dates=['hora'])
         if all(col in df_vento.columns for col in ['velocidade', 'direcao', 'u', 'v']):
             return agrupar_por_direcao(df_vento)
-        else:
-            print("Cache antigo incompleto. Atualizando cache...")
 
     url = (
         f"https://archive-api.open-meteo.com/v1/archive?"
         f"latitude={lat}&longitude={lon}&start_date={ano}-01-01&end_date={ano}-12-31"
-        "&hourly=wind_speed_10m,wind_direction_10m"
-        "&timezone=America%2FSao_Paulo"
+        "&hourly=wind_speed_10m,wind_direction_10m&timezone=America%2FSao_Paulo"
     )
-
     res = requests.get(url)
     res.raise_for_status()
     dados = res.json()
-    if not dados.get('hourly'):
+
+    if not dados.get('hourly') or not dados['hourly'].get('time'):
         return None
-    
+
     df_vento = pd.DataFrame({
-        "hora": pd.to_datetime(dados['hourly'].get('time', [])),
-        "velocidade": dados['hourly'].get('wind_speed_10m', [None] * len(dados['hourly'].get('time', []))),
-        "direcao": dados['hourly'].get('wind_direction_10m', [None] * len(dados['hourly'].get('time', []))),
+        "hora": pd.to_datetime(dados['hourly']['time']),
+        "velocidade": dados['hourly']['wind_speed_10m'],
+        "direcao": dados['hourly']['wind_direction_10m'],
         "lat": lat,
         "lon": lon
     })
 
     df_vento = calcular_vetor(df_vento)
     df_vento.to_csv(arquivo, index=False)
-
-    if not dados.get('hourly') or not dados['hourly'].get('time'):
-        return None
     return agrupar_por_direcao(df_vento)
 
 def coletar_grade_vento(cidade, ano):
     lat_centro, lon_centro = obter_coordenadas(cidade)
     pontos = gerar_grade(lat_centro, lon_centro, delta=1, n=5)
-
     df_lista = []
+
     for lat, lon in pontos:
         try:
-            df_ponto = buscar_dados_vento_ponto(lat, lon, ano, cidade) 
+            df_ponto = buscar_dados_vento_ponto(lat, lon, ano, cidade)
             if df_ponto is not None:
-                df_lista.append(df_ponto)  # df_ponto já está agrupado por setor
+                df_lista.append(df_ponto)
         except Exception as e:
             print(f"Erro no ponto {lat},{lon}: {e}")
-    if df_lista:
-        df_grade = pd.concat(df_lista, ignore_index=True)
-        return df_grade
-    return pd.DataFrame(columns=['u', 'v', 'lat', 'lon']) 
-    
+    return pd.concat(df_lista, ignore_index=True) if df_lista else pd.DataFrame(columns=['u', 'v', 'lat', 'lon'])
+
+def plotar_isobaras(ax, df_grade):
+    if 'pressao' not in df_grade.columns:
+        df_grade['pressao'] = 1013 - (df_grade['v'] + df_grade['u']) * 2
+
+    xi, yi, zi = interpolate_to_grid(df_grade['lon'], df_grade['lat'], df_grade['pressao'], hres=0.1)
+
+    cs = ax.contour(xi, yi, zi, levels=range(990, 1030, 4), colors='black', linewidths=1, transform=ccrs.PlateCarree())
+    ax.clabel(cs, inline=True, fontsize=8, fmt='%d hPa')
+
+def marcar_centros_pressao(ax, df_grade):
+    if 'pressao' not in df_grade.columns:
+        return
+    max_ponto = df_grade.loc[df_grade['pressao'].idxmax()]
+    min_ponto = df_grade.loc[df_grade['pressao'].idxmin()]
+    for ponto, label, cor in [(max_ponto, 'H', 'blue'), (min_ponto, 'L', 'red')]:
+        ax.text(ponto['lon'], ponto['lat'], label, fontsize=20, weight='bold', color=cor,
+                ha='center', va='center', transform=ccrs.PlateCarree())
 def mapa_vento(cidade, ano):
     df_grade = coletar_grade_vento(cidade, ano)
     lat_centro, lon_centro = obter_coordenadas(cidade)
 
-    # Converter u e v para numérico e remover dados inválidos
     df_grade['u'] = pd.to_numeric(df_grade['u'], errors='coerce')
     df_grade['v'] = pd.to_numeric(df_grade['v'], errors='coerce')
     df_grade = df_grade.dropna(subset=['u', 'v'])
 
-    # Projeção
+    # Interpolação para grade 2D
+    lon_vals = df_grade['lon'].values
+    lat_vals = df_grade['lat'].values
+    u_vals = df_grade['u'].values
+    v_vals = df_grade['v'].values
+
+    lon_grid, lat_grid = np.meshgrid(
+        np.linspace(lon_vals.min(), lon_vals.max(), 100),
+        np.linspace(lat_vals.min(), lat_vals.max(), 100)
+    )
+
+    u_grid = griddata((lon_vals, lat_vals), u_vals, (lon_grid, lat_grid), method='linear')
+    v_grid = griddata((lon_vals, lat_vals), v_vals, (lon_grid, lat_grid), method='linear')
+    intensidade_grid = np.sqrt(u_grid**2 + v_grid**2)
+
     proj = ccrs.Mercator()
-    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={'projection': proj})
+    fig, ax = plt.subplots(figsize=(12, 8), subplot_kw={'projection': proj})
     ax.set_extent([lon_centro - 2, lon_centro + 2, lat_centro - 2, lat_centro + 2], crs=ccrs.PlateCarree())
 
     ax.add_feature(cfeature.LAND.with_scale('50m'), facecolor='lightgray')
@@ -337,21 +340,49 @@ def mapa_vento(cidade, ano):
     ax.add_feature(cfeature.LAKES.with_scale('50m'), alpha=0.5)
     ax.add_feature(cfeature.RIVERS.with_scale('50m'))
 
-    # Pontos centrais
-    ax.plot(lon_centro, lat_centro, 'ro', markersize=8, transform=ccrs.PlateCarree())
-    ax.text(lon_centro + 0.1, lat_centro + 0.1, cidade, transform=ccrs.PlateCarree())
-
-    # VETORES DE VENTO
-    ax.quiver(
+    # Pontilhado com intensidade
+    sc = ax.scatter(
         df_grade['lon'], df_grade['lat'],
-        df_grade['u'], df_grade['v'],
-        transform=ccrs.PlateCarree(),
-        angles='xy',
-        scale_units='xy',
-        scale=1.5,
-        color='blue',
-        width=0.003
+        c=np.sqrt(df_grade['u']**2 + df_grade['v']**2),
+        cmap='plasma', s=30, alpha=0.8,
+        transform=ccrs.PlateCarree()
     )
+    plt.colorbar(sc, ax=ax, orientation='vertical', label='Velocidade do vento (m/s)')
+
+    # Linhas de corrente (streamplot)
+    ax.streamplot(
+        lon_grid, lat_grid, u_grid, v_grid,
+        color=intensidade_grid,
+        cmap='plasma',
+        linewidth=1.5,
+        density=2,
+        transform=ccrs.PlateCarree()
+    )
+
+    plotar_isobaras(ax, df_grade)
+    marcar_centros_pressao(ax, df_grade)
+
+    # Rosa dos ventos
+    lon_leg, lat_leg = lon_centro + 1.5, lat_centro - 1.5
+    legenda = pd.DataFrame({'direcao': [0, 90, 180, 270], 'label': ['N', 'E', 'S', 'O']})
+    ang_rad = np.deg2rad(legenda['direcao'])
+    legenda['u'] = -np.sin(ang_rad)
+    legenda['v'] = -np.cos(ang_rad)
+    legenda['lat'] = lat_leg
+    legenda['lon'] = lon_leg
+
+    ax.quiver(
+        legenda['lon'], legenda['lat'],
+        legenda['u'], legenda['v'],
+        transform=ccrs.PlateCarree(),
+        color='black', scale=10, width=0.005
+    )
+
+    offset = 0.15
+    for _, row in legenda.iterrows():
+        ax.text(row['lon'] + row['u'] * offset, row['lat'] + row['v'] * offset,
+                row['label'], transform=ccrs.PlateCarree(),
+                ha='center', va='center', fontsize=10, weight='bold')
 
     ax.set_title(f'Mapa de vento médio anual em {cidade} em {ano}')
     return fig
