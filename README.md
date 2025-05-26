@@ -40,6 +40,7 @@ Etapas para instalar Sol
 ```
 2. Para instalar todas as dependências e bibliotecas necessários para o programa funcionar, no terminal, rode:
 ```bash
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
