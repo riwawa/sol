@@ -23,12 +23,37 @@ app_ui = ui.page_sidebar(
     ui.column(
         12,
         ui.div(
-            ui.h2(
-                'Visualizador Climático', style='background-color: #004578; color: white; font-family: "Arial Black"; padding: 10px 20px; border-radius: 10px;'
+            ui.div(
+                ui.h2(
+                    'Visualizador Climático',
+                    style='color: white; font-family: "Arial Black"; margin: 0;'
+                ),
+                ui.img(
+                    src="sol.jpeg", 
+                    height="100px", 
+                    width="100px",
+                    style='margin-left: auto;'  # empurra a imagem pro final da linha
+                ),
+                style=(
+                    'display: flex; '
+                    'align-items: center; '
+                    'justify-content: space-between;'  # texto na esquerda, imagem na direita
+                )
             ),
+            style=(
+                'background-color: #004578; '
+                'padding: 10px 20px; '
+                'border-radius: 15px; '
+                'width: 920px;'
+            )
         ),
-        ui.div( # Gráfico
-            ui.panel_conditional("input.tipo_dado == 'Temperatura' && input.tipo_vis == 'Gráfico'", ui.output_plot('graficoTemp')),
+        ui.div( 
+            ui.panel_conditional("input.tipo_dado == 'Temperatura' && input.tipo_vis == 'Gráfico'", ui.output_plot('graficoTemp'),
+            style=(
+                'background: linear-gradient(to bottom, #004578, #006099); '
+                'padding: 15px; border-radius: 30px; width: 920px; '
+                'box-shadow: 0 6px 25px rgba(0, 0, 0, 0.3); margin-top: 50px;'
+            )),
             ui.panel_conditional("input.tipo_dado == 'Temperatura' && input.tipo_vis == 'Mapa'", ui.output_plot('mapaTop'), height='700px', width='100%'),
 
             ui.panel_conditional("input.tipo_dado == 'Precipitação' && input.tipo_vis == 'Gráfico'", ui.output_plot('graficoChuva')),
@@ -102,7 +127,8 @@ def server(input, output, session):
             print(f"Erro ao gerar o mapa: {e}")
             return fig
 
-app = App(app_ui, server)
+from pathlib import Path
+app = App(app_ui, server, static_assets=Path(__file__).parent / "www")
 
 if __name__ == "__main__":
     import shiny
