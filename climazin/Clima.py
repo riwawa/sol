@@ -26,25 +26,37 @@ app_ui = ui.page_sidebar(
             ui.div(
                 ui.h2(
                     'Visualizador Climático',
-                    style='color: white; font-family: "Arial Black"; margin: 0;'
-                ),
-                ui.img(
-                    src="sol.jpeg", 
-                    height="100px", 
-                    width="100px",
-                    style='margin-left: auto;'  # empurra a imagem pro final da linha
-                ),
-                style=(
-                    'display: flex; '
-                    'align-items: center; '
-                    'justify-content: space-between;'  # texto na esquerda, imagem na direita
+                    style='color: white; font-family: "Arial Black"; margin: 0 10px 0 0;'
+            ),
+            #IMAGEM
+            ui.panel_conditional("input.tipo_dado == 'Temperatura'",
+                ui.div(
+                    ui.img(src="Temperatura.png",height="100px", width="100px",),
                 )
             ),
+
+            ui.panel_conditional("input.tipo_dado == 'Precipitação'",
+                ui.div(
+                    ui.img(src="Clima.png",height="100px", width="100px",),
+                )
+            ),
+
+            ui.panel_conditional("input.tipo_dado == 'Vento'",
+                ui.div(
+                    ui.img(src="Vento.png",height="100px", width="100px",),
+                )
+            ),
+            style='flex: 1; text-align: center;'
+            #------------
+            ),
             style=(
-                'background-color: #004578; '
-                'padding: 10px 20px; '
-                'border-radius: 15px; '
-                'width: 920px;'
+            'background-color: #004578; '
+            'padding: 10px 20px; '
+            'border-radius: 15px; '
+            'width: 920px; '
+            'display: flex; '
+            'align-items: center; '
+            'justify-content: space-between;'
             )
         ),
         ui.div( 
@@ -62,7 +74,7 @@ app_ui = ui.page_sidebar(
             ui.panel_conditional("input.tipo_dado == 'Vento' && input.tipo_vis == 'Mapa'", ui.output_plot('ventoMapa')),
             ui.panel_conditional("input.tipo_dado == 'Vento' && input.tipo_vis == 'Gráfico'", ui.output_ui("avisoGrafico")),
 
-            style='background: linear-gradient(to bottom, #004578, #7ba8c9); padding: 10px; border-radius: 10px; width: 100%; box-shadow: 0 4px 20px rgba(0, 0, 0 , 0.3); margin-top: 50px;'
+            style='background: linear-gradient(to bottom, #004578, #7ba8c9); padding: 10px; border-radius: 10px; width: 920px;; box-shadow: 0 4px 20px rgba(0, 0, 0 , 0.3); margin-top: 50px;'
         ),
         ui.tags.style("""
             body {
