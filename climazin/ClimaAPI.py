@@ -155,7 +155,7 @@ def gerar_mapa_temperatura(cidade, ano):
         print("Erro ao obter coordenadas:", e)
         return None
 
-    tamanho_grid = 15
+    tamanho_grid = 10
     lat_range = np.linspace(lat_c - 5, lat_c + 5, tamanho_grid)
     lon_range = np.linspace(lon_c - 5, lon_c + 5, tamanho_grid)
 
@@ -163,7 +163,7 @@ def gerar_mapa_temperatura(cidade, ano):
     pontos = []
     temperaturas = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         resultados = executor.map(lambda p: buscar_dados_ponto(p[0], p[1], ano), lista_pontos)
 
     for resultado in resultados:
@@ -182,6 +182,10 @@ def gerar_mapa_temperatura(cidade, ano):
     if len(pontos) < 4:
         print("ERRO: Pontos insuficientes para interpolação (mínimo 4).")
         return None
+    print(f"Exemplo de 5 pontos coletados:")
+    for p, t in list(zip(pontos, temperaturas))[:5]:
+        print(f"Lat: {p[0]:.2f}, Lon: {p[1]:.2f}, Temp: {t:.2f}")
+
 
     lon_grid, lat_grid = np.meshgrid(
         np.linspace(lon_c - 5, lon_c + 5, 100),
@@ -189,7 +193,10 @@ def gerar_mapa_temperatura(cidade, ano):
     )
 
     # Interpolação principal
-    temp_grid = griddata(pontos, temperaturas, (lon_grid, lat_grid), method='linear')
+    for method in ['cubic', 'linear', 'nearest']:
+        temp_grid = griddata(pontos,temperaturas, (lon_grid, lat_grid), method=method)
+        if temp_grid is not None and not np.isnan(temp_grid).all():
+            break
 
     if temp_grid is None or np.isnan(temp_grid).all():
         print("Resultado da interpolação 'linear' falhou. Usando 'nearest' como fallback...")

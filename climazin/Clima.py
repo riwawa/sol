@@ -29,7 +29,7 @@ app_ui = ui.page_sidebar(
         ),
         ui.div( # Gráfico
             ui.panel_conditional("input.tipo_dado == 'Temperatura' && input.tipo_vis == 'Gráfico'", ui.output_plot('graficoTemp')),
-            ui.panel_conditional("input.tipo_dado == 'Temperatura' && input.tipo_vis == 'Mapa'", ui.output_plot('mapaTemp')),
+            ui.panel_conditional("input.tipo_dado == 'Temperatura' && input.tipo_vis == 'Mapa'", ui.output_plot('mapaTop'), height='700px', width='100%'),
 
             ui.panel_conditional("input.tipo_dado == 'Precipitação' && input.tipo_vis == 'Gráfico'", ui.output_plot('graficoChuva')),
             ui.panel_conditional("input.tipo_dado == 'Precipitação' && input.tipo_vis == 'Mapa'", ui.output_ui("avisoMapa")),
