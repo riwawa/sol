@@ -93,8 +93,14 @@ def server(input, output, session):
     def mapaTop():
         cidade = input.cidade()
         ano = input.ano()
-        fig = gerar_mapa_temperatura(cidade, ano)
-        return fig
+        try:
+            fig = gerar_mapa_temperatura(cidade, ano)
+            if fig is None:
+                raise ValueError("Figura não foi gerada")
+            return fig
+        except Exception as e:
+            print(f"Erro ao gerar o mapa: {e}")
+            return fig
 
 app = App(app_ui, server)
 

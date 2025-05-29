@@ -11,7 +11,7 @@ from metpy.units import units
 from scipy.interpolate import griddata # interpolação de dados espaciais
 import concurrent.futures # parelização de requisições - serve pra deixar mais rapido o carregamento
 import time
-
+import matplotlib.image as mpimg
 
 
 def obter_coordenadas(cidade):
@@ -129,7 +129,6 @@ def buscar_dados_ponto(lat, lon, ano, tentativas=3, delay=5):
             return None
     return None
 
-
 def gerar_mapa_temperatura(cidade, ano):   
     pasta_base = os.path.join("dados", cidade.replace(" ", "_"), str(ano))
     pasta_cache = os.path.join(pasta_base, "cache_mapas")
@@ -137,30 +136,36 @@ def gerar_mapa_temperatura(cidade, ano):
 
     nome_arquivo = os.path.join(pasta_cache, f"{cidade.replace(' ', '_')}_{ano}.png")
 
-    if os.path.exists(nome_arquivo): # caso o mapa está no cache, ele retorna a figura do cache
-        fig, ax = plt.subplots(figsize=(8, 8))
-        ax.imshow(plt.imread(nome_arquivo))
-        ax.axis('off')
-        return fig
+    if os.path.exists(nome_arquivo):  # Tenta carregar do cache
+        try:
+            fig, ax = plt.subplots(figsize=(8, 8))
+            img = mpimg.imread(nome_arquivo)
+            ax.imshow(img)
+            ax.axis('off')
+            plt.tight_layout()
+            return fig
+        except Exception as e:
+            print("Erro ao carregar imagem do cache:", e)
 
-    # caso contrário:
     print("Gerando novo mapa...")
 
-    lat_c, lon_c = obter_coordenadas(cidade) # obtém a latitude e longitude da cidade
-    tamanho_grid = 15 # define uma grade tamanho 15x15
-    lat_range = np.linspace(lat_c - 5, lat_c + 5, tamanho_grid) # cobre uma area de 10 graus
-    lon_range = np.linspace(lon_c - 5, lon_c + 5, tamanho_grid) # cobre uma area de 10 graus
+    try:
+        lat_c, lon_c = obter_coordenadas(cidade)
+    except Exception as e:
+        print("Erro ao obter coordenadas:", e)
+        return None
 
+    tamanho_grid = 15
+    lat_range = np.linspace(lat_c - 5, lat_c + 5, tamanho_grid)
+    lon_range = np.linspace(lon_c - 5, lon_c + 5, tamanho_grid)
+
+    lista_pontos = [(lat, lon) for lat in lat_range for lon in lon_range]
     pontos = []
     temperaturas = []
- 
 
-    # criar lista de todos os pontos (lat, lon)
-    lista_pontos = [(lat, lon) for lat in lat_range for lon in lon_range]
-
-    # paralelizar requisições
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         resultados = executor.map(lambda p: buscar_dados_ponto(p[0], p[1], ano), lista_pontos)
+
     for resultado in resultados:
         if resultado is not None:
             ponto, dados = resultado
@@ -168,14 +173,41 @@ def gerar_mapa_temperatura(cidade, ano):
                 pontos.append(ponto)
                 temperaturas.append(dados['temp'])
 
-    # interpolação dos dados
+    print(f"Total de pontos válidos para interpolação: {len(pontos)}")
+
+    if not pontos or not temperaturas:
+        print("ERRO: Nenhum dado de temperatura válido foi encontrado.")
+        return None
+
+    if len(pontos) < 4:
+        print("ERRO: Pontos insuficientes para interpolação (mínimo 4).")
+        return None
+
     lon_grid, lat_grid = np.meshgrid(
         np.linspace(lon_c - 5, lon_c + 5, 100),
         np.linspace(lat_c - 5, lat_c + 5, 100)
     )
+
+    # Interpolação principal
     temp_grid = griddata(pontos, temperaturas, (lon_grid, lat_grid), method='linear')
- 
-    # PROJEÇÃO DO MAPA -------
+
+    if temp_grid is None or np.isnan(temp_grid).all():
+        print("Resultado da interpolação 'linear' falhou. Usando 'nearest' como fallback...")
+        temp_grid = griddata(pontos, temperaturas, (lon_grid, lat_grid), method='nearest')
+
+    if temp_grid is None or np.isnan(temp_grid).all():
+        print("ERRO: Mesmo com 'nearest', a interpolação falhou.")
+        return None
+
+    # Visualização opcional dos pontos amostrados
+    # plt.figure(figsize=(6,6))
+    # lats, lons = zip(*pontos)
+    # plt.scatter(lons, lats, c=temperaturas, cmap='coolwarm')
+    # plt.title("Pontos de temperatura coletados")
+    # plt.colorbar(label='Temp (°C)')
+    # plt.grid(True)
+    # plt.show()
+
     fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'projection': ccrs.PlateCarree()})
     ax.set_extent([lon_c - 5, lon_c + 5, lat_c - 5, lat_c + 5])
     ax.add_feature(cfeature.COASTLINE)
@@ -184,9 +216,10 @@ def gerar_mapa_temperatura(cidade, ano):
     plt.colorbar(cont, ax=ax, label='Temperatura Média Anual (°C)')
     ax.set_title(f"Mapa de Temperatura em {cidade} ({ano})")
 
-    fig.savefig(nome_arquivo,)
-
+    print(f"Salvando imagem em: {nome_arquivo}")
+    fig.savefig(nome_arquivo)
     plt.tight_layout(pad=0)
+ 
     return fig
 
 def grafico_chuva(df, cidade, ano):
@@ -306,6 +339,7 @@ def marcar_centros_pressao(ax, df_grade):
     for ponto, label, cor in [(max_ponto, 'H', 'blue'), (min_ponto, 'L', 'red')]:
         ax.text(ponto['lon'], ponto['lat'], label, fontsize=20, weight='bold', color=cor,
                 ha='center', va='center', transform=ccrs.PlateCarree())
+                
 def mapa_vento(cidade, ano):
     df_grade = coletar_grade_vento(cidade, ano)
     lat_centro, lon_centro = obter_coordenadas(cidade)
@@ -314,7 +348,6 @@ def mapa_vento(cidade, ano):
     df_grade['v'] = pd.to_numeric(df_grade['v'], errors='coerce')
     df_grade = df_grade.dropna(subset=['u', 'v'])
 
-    # Interpolação para grade 2D
     lon_vals = df_grade['lon'].values
     lat_vals = df_grade['lat'].values
     u_vals = df_grade['u'].values
@@ -340,7 +373,6 @@ def mapa_vento(cidade, ano):
     ax.add_feature(cfeature.LAKES.with_scale('50m'), alpha=0.5)
     ax.add_feature(cfeature.RIVERS.with_scale('50m'))
 
-    # Pontilhado com intensidade
     sc = ax.scatter(
         df_grade['lon'], df_grade['lat'],
         c=np.sqrt(df_grade['u']**2 + df_grade['v']**2),
@@ -349,7 +381,6 @@ def mapa_vento(cidade, ano):
     )
     plt.colorbar(sc, ax=ax, orientation='vertical', label='Velocidade do vento (m/s)')
 
-    # Linhas de corrente (streamplot)
     ax.streamplot(
         lon_grid, lat_grid, u_grid, v_grid,
         color=intensidade_grid,
@@ -362,7 +393,6 @@ def mapa_vento(cidade, ano):
     plotar_isobaras(ax, df_grade)
     marcar_centros_pressao(ax, df_grade)
 
-    # Rosa dos ventos
     lon_leg, lat_leg = lon_centro + 1.5, lat_centro - 1.5
     legenda = pd.DataFrame({'direcao': [0, 90, 180, 270], 'label': ['N', 'E', 'S', 'O']})
     ang_rad = np.deg2rad(legenda['direcao'])
